@@ -10,8 +10,7 @@ jobs:
     steps:
       - name: Check PR labels
         run: |
-          labels=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name')
-
+          labels=$(echo '${{ toJson(github.event.pull_request.labels) }}' | jq -r '.[].name')
           echo "PR labels: $labels"
 
           if echo "$labels" | grep -E '^(major|minor|patch)$' > /dev/null; then
@@ -20,5 +19,3 @@ jobs:
             echo "❌ PR must have one of these labels: major, minor, patch"
             exit 1
           fi
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
