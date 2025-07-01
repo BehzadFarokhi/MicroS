@@ -9,69 +9,71 @@ on:
 
 jobs:
   tag:
-    if: github.event.pull_request.merged == true && github.base_ref == 'master'
+    if: github.event.pull_request.merged == true && github.base_ref == 'main'
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Ensure full history so tags are available
 
-      - name: Get latest tag
-        id: get_tag
-        run: |
-          latest_tag=$(git describe --tags --abbrev=0 || echo "v0.0.0")
-          echo "latest_tag=$latest_tag" >> $GITHUB_ENV
+    - name: Get latest tag
+      id: get_tag
+      run: |
+        latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "latest_tag=$latest_tag" >> $GITHUB_ENV
 
-      - name: Determine version bump
-        id: determine
-        run: |
-          label=""
-          for l in ${{ toJson(github.event.pull_request.labels) }}; do
-            if echo $l | grep -q 'major'; then
-              label="major"; break
-            elif echo $l | grep -q 'minor'; then
-              label="minor"
-            elif echo $l | grep -q 'patch'; then
-              label="patch"
-            fi
-          done
+    - name: Determine version bump
+      id: determine
+      run: |
+        label="patch"  # Default
+        labels=$(echo '${{ toJson(github.event.pull_request.labels) }}' | jq -r '.[].name')
+        echo "PR labels: $labels"
 
-          if [ -z "$label" ]; then
+        for l in $labels; do
+          if [ "$l" = "major" ]; then
+            label="major"
+            break
+          elif [ "$l" = "minor" ]; then
+            label="minor"
+          elif [ "$l" = "patch" ]; then
             label="patch"
           fi
+        done
 
-          echo "Chosen bump: $label"
-          echo "bump=$label" >> $GITHUB_ENV
+        echo "Chosen bump: $label"
+        echo "bump=$label" >> $GITHUB_ENV
 
-      - name: Bump version
-        id: bump
-        run: |
-          IFS='.' read -r -a parts <<< "${{ env.latest_tag#v }}"
-          major="${parts[0]}"
-          minor="${parts[1]}"
-          patch="${parts[2]}"
+    - name: Bump version
+      id: bump
+      run: |
+        version="${{ env.latest_tag }}"
+        version="${version#v}"  # Remove leading v
+        IFS='.' read -r major minor patch <<< "$version"
 
-          case "${{ env.bump }}" in
-            major)
-              major=$((major + 1))
-              minor=0
-              patch=0
-              ;;
-            minor)
-              minor=$((minor + 1))
-              patch=0
-              ;;
-            patch)
-              patch=$((patch + 1))
-              ;;
-          esac
+        case "${{ env.bump }}" in
+          major)
+            major=$((major + 1))
+            minor=0
+            patch=0
+            ;;
+          minor)
+            minor=$((minor + 1))
+            patch=0
+            ;;
+          patch)
+            patch=$((patch + 1))
+            ;;
+        esac
 
-          new_tag="v${major}.${minor}.${patch}"
-          echo "New tag: $new_tag"
-          echo "new_tag=$new_tag" >> $GITHUB_ENV
+        new_tag="v${major}.${minor}.${patch}"
+        echo "New tag: $new_tag"
+        echo "new_tag=$new_tag" >> $GITHUB_ENV
 
-      - name: Create tag
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-          git tag ${{ env.new_tag }}
-          git push origin ${{ env.new_tag }}
+    - name: Create tag
+      run: |
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+        git tag ${{ env.new_tag }}
+        git push origin ${{ env.new_tag }}
